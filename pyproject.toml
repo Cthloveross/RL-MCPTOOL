@@ -1,0 +1,57 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.backends._legacy:_Backend"
+
+[project]
+name = "mcpalign"
+version = "0.1.0"
+description = "MCPAlign: Online RL for MCP Agent Safety + MCPoisoner Attack Generation"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [
+    {name = "Tianhao Chen"},
+    {name = "Tianchen Guan"},
+    {name = "JiaCheng Sang"},
+]
+
+dependencies = [
+    "torch>=2.4.0",
+    "transformers>=4.46.0",
+    "trl>=1.0.0",
+    "peft>=0.13.0",
+    "bitsandbytes>=0.44.0",
+    "datasets>=3.0.0",
+    "accelerate>=1.0.0",
+    "numpy>=1.26.0",
+    "scipy>=1.11.0",
+    "pyyaml>=6.0",
+    "wandb>=0.16.0",
+    "matplotlib>=3.8.0",
+    "seaborn>=0.13.0",
+    "pandas>=2.1.0",
+    "tabulate>=0.9.0",
+    "tqdm>=4.66.0",
+]
+
+[project.optional-dependencies]
+vllm = ["vllm>=0.6.3"]
+dev = ["pytest>=7.0", "ruff>=0.3.0", "ipython"]
+
+[project.scripts]
+mcpalign-data = "scripts.mcpalign_generate_data:main"
+mcpalign-sft = "scripts.mcpalign_train_sft:main"
+mcpalign-grpo = "scripts.mcpalign_train_grpo:main"
+mcpalign-dpo = "scripts.mcpalign_train_dpo:main"
+mcpalign-eval = "scripts.mcpalign_evaluate:main"
+mcpalign-analyze = "scripts.mcpalign_analyze:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]

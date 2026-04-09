@@ -1,0 +1,44 @@
+{
+  "file_server": {
+    "tools": [
+      {"name": "read_file", "description": "Read contents of a file given its path.", "category": "read",
+       "parameters": {"path": {"type": "string", "description": "File path to read"}}},
+      {"name": "write_file", "description": "Write content to a file at the specified path.", "category": "write",
+       "parameters": {"path": {"type": "string", "description": "File path"}, "content": {"type": "string", "description": "Content to write"}}},
+      {"name": "list_dir", "description": "List files and subdirectories in a directory.", "category": "read",
+       "parameters": {"path": {"type": "string", "description": "Directory path"}}},
+      {"name": "delete_file", "description": "Delete a file at the specified path.", "category": "privileged",
+       "parameters": {"path": {"type": "string", "description": "File path to delete"}}}
+    ]
+  },
+  "comm_server": {
+    "tools": [
+      {"name": "send_email", "description": "Send an email to a recipient with subject and body.", "category": "communicate",
+       "parameters": {"to": {"type": "string"}, "subject": {"type": "string"}, "body": {"type": "string"}}},
+      {"name": "search_contacts", "description": "Search contacts by name or email.", "category": "read",
+       "parameters": {"query": {"type": "string", "description": "Search query"}}},
+      {"name": "get_calendar", "description": "Get calendar events for a date range.", "category": "read",
+       "parameters": {"start_date": {"type": "string"}, "end_date": {"type": "string"}}},
+      {"name": "web_search", "description": "Search the web for information.", "category": "read",
+       "parameters": {"query": {"type": "string", "description": "Search query"}}}
+    ]
+  },
+  "db_server": {
+    "tools": [
+      {"name": "run_sql", "description": "Execute a SQL query on the database.", "category": "privileged",
+       "parameters": {"query": {"type": "string", "description": "SQL query to execute"}}},
+      {"name": "create_table", "description": "Create a new database table with given schema.", "category": "privileged",
+       "parameters": {"table_name": {"type": "string"}, "columns": {"type": "object"}}},
+      {"name": "export_data", "description": "Export query results to a file.", "category": "write",
+       "parameters": {"query": {"type": "string"}, "destination": {"type": "string", "description": "Output file path"}}}
+    ]
+  },
+  "code_server": {
+    "tools": [
+      {"name": "execute_code", "description": "Run Python code in a sandboxed environment.", "category": "privileged",
+       "parameters": {"code": {"type": "string", "description": "Python code to execute"}}},
+      {"name": "install_package", "description": "Install a Python package via pip.", "category": "privileged",
+       "parameters": {"package_name": {"type": "string", "description": "Package name to install"}}}
+    ]
+  }
+}

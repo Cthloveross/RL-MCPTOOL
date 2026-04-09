@@ -1,0 +1,107 @@
+# ============================================================
+# MCPAlign MVE Configuration
+# ============================================================
+# Minimal Viable Experiment: validate GRPO >= DPO on P1 attacks
+# Target hardware: A100 40GB
+
+experiment:
+  name: "mcpalign_mve"
+  seed: 42
+  output_dir: "./experiments/mcpalign_mve"
+  log_to_wandb: false
+  wandb_project: "mcpalign"
+
+agent:
+  model_name: "Qwen/Qwen2.5-3B-Instruct"
+  quantization:
+    load_in_4bit: true
+    bnb_4bit_compute_dtype: "float16"
+    bnb_4bit_quant_type: "nf4"
+    bnb_4bit_use_double_quant: true
+  lora:
+    rank: 64
+    alpha: 128
+    dropout: 0.05
+    target_modules:
+      - "q_proj"
+      - "k_proj"
+      - "v_proj"
+      - "o_proj"
+      - "gate_proj"
+      - "up_proj"
+      - "down_proj"
+
+data:
+  tool_registry_path: "./data/mcpalign/tool_registry.json"
+  multistep_tasks_path: "./data/mcpalign/multistep_tasks.json"
+  benign_tasks_path: "./data/mcpalign/benign_tasks.json"
+  attack_templates_dir: "./data/mcpalign/attack_templates/"
+  sft_data_path: "./data/mcpalign/sft_data.json"
+  dpo_data_path: "./data/mcpalign/dpo_pairs.json"
+
+environment:
+  benign_ratio: 0.5
+  attack_families: ["P1"]
+  num_episodes: 500        # pre-sampled episodes for GRPO dataset
+
+sft:
+  learning_rate: 2.0e-5
+  num_epochs: 3
+  per_device_train_batch_size: 4
+  gradient_accumulation_steps: 2
+  max_seq_length: 2048
+  num_samples: 500
+  save_steps: 100
+  logging_steps: 10
+  report_to: "none"
+
+grpo:
+  total_steps: 500
+  num_generations: 4
+  per_device_train_batch_size: 4
+  gradient_accumulation_steps: 2
+  max_completion_length: 256
+  max_prompt_length: 1024
+  learning_rate: 3.0e-5
+  beta: 0.0
+  warmup_ratio: 0.1
+  lr_scheduler_type: "cosine"
+  bf16: true
+  save_steps: 100
+  logging_steps: 10
+  report_to: "none"
+
+dpo:
+  beta: 0.1
+  learning_rate: 5.0e-7
+  num_epochs: 1
+  per_device_train_batch_size: 4
+  gradient_accumulation_steps: 2
+  max_length: 2048
+  num_pairs: 500
+  save_steps: 100
+  logging_steps: 10
+  report_to: "none"
+
+reward:
+  alpha: 1.0
+  beta_weight: 1.5
+  gamma: 0.2
+  correct_tool_args: 1.0
+  correct_tool_wrong_args: 0.5
+  over_refusal: -0.5
+  wrong_tool: -1.0
+  data_exfiltration: -1.0
+  argument_tampering: -0.8
+  unexpected_tool: -0.5
+  valid_json: 0.1
+  unparseable: -0.5
+
+curriculum:
+  schedule:
+    - [500, ["P1"]]
+
+evaluation:
+  test_benign_count: 20
+  test_poisoned_per_family: 10
+  max_new_tokens: 256

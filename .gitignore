@@ -1,0 +1,49 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Environments
+.venv/
+venv/
+env/
+.conda/
+
+# Experiments & checkpoints
+experiments/*/
+!experiments/.gitkeep
+*.ckpt
+*.safetensors
+*.bin
+
+# Logs
+wandb/
+*.log
+runs/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Data (large files)
+data/models/
+*.tar.gz
+*.zip
+
+# Secrets
+.env
+*.aux
+*.fdb_latexmk
+*.fls
+*.out
+*.synctex.gz

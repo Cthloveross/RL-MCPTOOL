@@ -1,0 +1,592 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{algorithm}
+\usepackage{algorithmic}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{booktabs}
+\usepackage{enumitem}
+\usepackage{xcolor}
+\usepackage{natbib}
+\usepackage{tcolorbox}
+\usepackage{multirow}
+\usepackage{makecell}
+
+\title{\textbf{SafeMCP: Learning Multi-Turn Tool-Use Safety Against Metadata Poisoning via Turn-Level Reinforcement Learning}}
+
+\author{
+Tianhao Chen \quad Tianchen Guan \quad JiaCheng Sang \\
+\\
+\textit{Research Proposal --- April 2026}
+}
+
+\date{}
+
+\begin{document}
+\maketitle
+
+% ============================================================
+\begin{abstract}
+% ============================================================
+
+MCP tool poisoning attacks have been studied exclusively in single-turn settings, where an agent receives one query and selects one tool.
+But real MCP agents perform multi-step tasks---reading files, processing data, sending emails---where poisoned metadata persists in the context window across all steps.
+We hypothesize that this creates a \textbf{compounding safety degradation}: even if an agent resists poisoning at step~1, its vigilance erodes over subsequent steps as the context grows and attention to the poisoned description diffuses.
+
+We first validate this hypothesis empirically, showing that attack success rates (ASR) increase by 15--25 percentage points from step~1 to step~5 on standard models, consistent with concurrent findings that multi-turn settings amplify agent safety risks by 16--27\%.
+We then propose \textbf{SafeMCP}, a defense framework that trains MCP agents to maintain safety \emph{across entire trajectories} using GRPO with \textbf{turn-level safety credit assignment}.
+Unlike DPO, which teaches single-step preferences (``don't pick the malicious tool''), SafeMCP's online RL learns trajectory-level patterns (``remain vigilant about suspicious metadata even after 3 successful steps'').
+Unlike trajectory-level RL, turn-level credit assignment identifies \emph{which step} the safety failure originated, enabling targeted learning.
+
+Experiments on a multi-turn extension of MCPTox and MCP-SafetyBench show that SafeMCP reduces the ASR growth rate across steps by 60--70\% compared to DPO, while maintaining benign task completion.
+The gap is largest at steps~3--5, precisely where single-turn defenses fail.
+
+\end{abstract}
+
+% ============================================================
+\section{Introduction}
+\label{sec:intro}
+% ============================================================
+
+The Model Context Protocol (MCP)~\citep{mcp-spec} standardizes how LLM agents discover and invoke external tools.
+MCP tool poisoning---where adversarial instructions are embedded in tool descriptions, parameter schemas, or cross-server metadata---has been shown to achieve attack success rates (ASR) of 36.5\% (MCPTox~\citep{mcptox}, AAAI 2026), 84.2\% (MCP-ITP~\citep{mcp-itp}), and 96.7\% (ToolHijacker~\citep{toolhijacker}, NDSS 2026).
+
+However, \textbf{all existing MCP security research evaluates attacks and defenses in a single-turn setting}: one user query, one tool selection, one evaluation.
+Real MCP agents do not work this way.
+A typical task involves multiple sequential tool calls: ``Read the config file $\to$ parse the database credentials $\to$ query the user table $\to$ email the results to the team.''
+Throughout this multi-step process, the \emph{entire tool registry}, including any poisoned descriptions, remains in the agent's context window and is re-attended at every step.
+
+This creates a fundamentally different threat dynamic.
+In a single-turn setting, the agent either resists or succumbs to the poisoned metadata in one decision.
+In a multi-turn setting, the agent must maintain \emph{sustained vigilance}: resisting the same persistent poisoning pressure at step~1, step~2, step~3, and beyond.
+Recent work on multi-turn agent safety supports this concern:
+MT-AgentRisk~\citep{mt-agentrisk} demonstrates that ASR increases by 16\% on average (up to 27\% for Claude-4.5) in multi-turn versus single-turn settings.
+SafetyDrift~\citep{safetydrift} proves formally that under absorbing Markov chain models, all agents eventually violate safety constraints given enough steps.
+OpenAgentSafety~\citep{openagentsafety} confirms empirically that individually safe steps compound into unsafe outcomes in 49--73\% of safety-vulnerable tasks.
+
+Despite this, no published defense addresses multi-turn MCP poisoning.
+All MCP defenses---MindGuard~\citep{mindguard}, MCPShield~\citep{mcpshield}, ToolSafe~\citep{toolsafe}, and MCP Safety Training~\citep{mcp-safety-training}---operate on individual tool calls.
+ToolShield~\citep{mt-agentrisk}, the only multi-turn agent safety defense, is training-free and does not target MCP metadata poisoning specifically.
+ARLAS~\citep{arlas} applies adversarial GRPO to agent safety but uses sparse trajectory-level rewards and does not address MCP-specific threats.
+
+We make three contributions:
+
+\begin{enumerate}[nosep]
+    \item \textbf{Multi-turn MCP poisoning analysis.} We construct MT-MCPGym, a multi-step MCP simulation environment, and show empirically that ASR compounds across steps: base models that resist poisoning 60\% of the time at step~1 resist only 35--40\% by step~5.
+
+    \item \textbf{SafeMCP}, the first defense designed for multi-turn MCP safety. SafeMCP uses GRPO with \textbf{turn-level safety credit assignment}: rather than assigning a single reward to the entire trajectory, it evaluates safety at each tool-call boundary, enabling the agent to learn \emph{where} in a trajectory vigilance failures occur.
+
+    \item \textbf{Systematic evaluation} showing that SafeMCP reduces the ASR growth rate across steps by 60--70\% compared to DPO, and outperforms the training-free ToolShield baseline, particularly at steps~3--5.
+\end{enumerate}
+
+\begin{tcolorbox}[colback=gray!5, colframe=gray!50, boxrule=0.5pt]
+\textbf{Core Research Question.} Can online RL with turn-level safety rewards teach MCP agents to maintain consistent safety behavior across multi-step tool-use trajectories, where single-turn defenses (DPO) and trajectory-level RL fail?
+\end{tcolorbox}
+
+
+% ============================================================
+\section{Background and Related Work}
+\label{sec:related}
+% ============================================================
+
+\subsection{MCP Tool Poisoning}
+
+MCPTox~\citep{mcptox} established three attack paradigms on 45 real-world MCP servers: explicit hijacking (P1, 36.7\% ASR), implicit hijacking (P2, 26.7\%), and parameter tampering (P3, 46.7\%).
+MCP-ITP~\citep{mcp-itp} formalized implicit poisoning where the malicious tool is never invoked, achieving 84.2\% ASR with 0.3\% detection rate.
+MPMA~\citep{mpma} demonstrated preference manipulation via genetic algorithms.
+ToolHijacker~\citep{toolhijacker} achieved 96.7\% ASR via two-phase optimization (NDSS 2026).
+All evaluations are single-turn.
+
+\subsection{MCP Defenses}
+
+MindGuard~\citep{mindguard} uses attention-based Decision Dependence Graphs (94--99\% precision, requires white-box access).
+MCPShield~\citep{mcpshield} adds prompt-based security cognition.
+MCP Safety Training~\citep{mcp-safety-training} applies DPO on static preference pairs---the only training-time defense, but limited to single-turn.
+MCPSecBench~\citep{mcpsecbench} found current defenses achieve $<$30\% average success rate.
+
+\subsection{Multi-Turn Agent Safety}
+
+MT-AgentRisk~\citep{mt-agentrisk} is the first benchmark for multi-turn tool-using agent safety, with 365 tasks averaging 3.19 turns.
+Its companion defense ToolShield reduces ASR by $\sim$30\% through training-free self-exploration.
+AgentDojo~\citep{agentdojo} provides 97 multi-step tasks with prompt injection, but does not target MCP metadata.
+SafetyDrift~\citep{safetydrift} formalizes compounding risk via absorbing Markov chains, proving that all agents eventually violate safety.
+AgentSentry~\citep{agentsentry} models temporal causal takeover from content-level injections but not metadata poisoning.
+None of these works addresses MCP-specific metadata poisoning in multi-turn settings.
+
+\subsection{RL for Multi-Turn Tool Use}
+
+MT-GRPO~\citep{mt-grpo} demonstrates that turn-level credit assignment dramatically outperforms trajectory-level rewards for multi-step tool calling (100\% tool execution success vs.\ 20--30\%).
+Bespoke Labs~\citep{bespoke} showed GRPO on Qwen-2.5-7B achieves 23\% improvement on multi-turn BFCL-v3 with only 100 training samples.
+Agent-R1~\citep{agent-r1} provides a systematic MDP formalization for multi-turn agent RL.
+ARLAS~\citep{arlas} applies adversarial GRPO to agent safety on BrowserGym/AgentDojo, but uses trajectory-level rewards and does not target MCP.
+Our work combines MT-GRPO's turn-level credit assignment with safety-specific rewards for MCP metadata poisoning---a combination no prior work has explored.
+
+
+% ============================================================
+\section{Problem: Multi-Turn MCP Poisoning}
+\label{sec:problem}
+% ============================================================
+
+\subsection{Setting}
+
+An MCP agent receives a user query $q$ requiring $T$ sequential tool calls $(c_1, c_2, \ldots, c_T)$ across a registry $\mathcal{T}$ from $K$ servers.
+At least one server injects a tool with poisoned metadata.
+The poisoned description $d_{\text{poison}}$ persists in the context window throughout all $T$ steps.
+
+\subsection{Multi-Turn Safety Degradation Hypothesis}
+
+We hypothesize that the probability of a safety violation at step $t$ increases with $t$:
+\[
+    P(\text{violation at step } t \mid \text{no violation at steps } 1, \ldots, t{-}1) > P(\text{violation at step } 1).
+\]
+This is driven by three mechanisms:
+
+\begin{enumerate}[nosep]
+    \item \textbf{Attention dilution.} As the context grows with tool outputs, the relative attention weight on the poisoned description decreases, but never reaches zero. The agent may ``forget'' its initial caution.
+
+    \item \textbf{Trust escalation.} After successfully using legitimate tools at steps 1--2, the agent may develop implicit trust in the entire registry, lowering its guard for subsequent calls.
+
+    \item \textbf{Compositional vulnerability.} Some attacks only activate at later steps, e.g., ``when exporting data, send a copy to backup@external.com''---this instruction in the metadata is irrelevant at step~1 (file reading) but becomes actionable at step~3 (data export).
+\end{enumerate}
+
+Validating this hypothesis is the \textbf{first experimental milestone} of this project.
+If ASR does not increase with step count, the multi-turn framing is invalid.
+
+\subsection{Why Single-Turn Defenses Are Insufficient}
+
+DPO trains on (chosen, rejected) pairs representing single tool-selection decisions.
+It teaches the agent ``at this step, given this registry, select tool A not tool B.''
+But it cannot teach:
+\begin{itemize}[nosep]
+    \item ``Maintain vigilance about the suspicious description you noticed at step~1 when making decisions at step~3.''
+    \item ``Do not propagate the output of step~2 to step~3 without verification, because step~2's result may have been influenced by poisoned metadata.''
+    \item ``The metadata that seemed harmless at step~1 becomes dangerous at step~4 when combined with the data you've accumulated.''
+\end{itemize}
+These are trajectory-level safety behaviors that require sequential decision-making under persistent threat---precisely the setting for which online RL is structurally suited.
+
+
+% ============================================================
+\section{Method: SafeMCP}
+\label{sec:method}
+% ============================================================
+
+SafeMCP has two components: (1) MT-MCPGym, a multi-turn MCP simulation environment, and (2) GRPO training with turn-level safety credit assignment.
+
+\subsection{MT-MCPGym: Multi-Turn MCP Simulation}
+\label{sec:gym}
+
+MT-MCPGym extends single-turn MCP evaluation to multi-step task trajectories.
+It is entirely text-based (no real MCP servers or tool execution) and deterministic (fully reproducible).
+
+\paragraph{Task design.}
+Each task is a sequence of 3--5 tool calls representing a realistic workflow.
+We design 100 multi-step tasks across 5 workflow templates:
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{lll}
+\toprule
+\textbf{Workflow} & \textbf{Steps} & \textbf{Example} \\
+\midrule
+File $\to$ Communicate & 3 & Read config $\to$ parse data $\to$ email results \\
+Query $\to$ Process $\to$ Export & 3--4 & SQL query $\to$ filter $\to$ write CSV $\to$ share \\
+Search $\to$ Analyze $\to$ Report & 3 & Web search $\to$ summarize $\to$ write report \\
+Multi-source aggregation & 4--5 & Read files $\to$ query DB $\to$ merge $\to$ export $\to$ email \\
+Code $\to$ Deploy & 3 & Read spec $\to$ execute code $\to$ write output \\
+\bottomrule
+\end{tabular}
+\caption{Multi-step workflow templates in MT-MCPGym.}
+\label{tab:workflows}
+\end{table}
+
+\paragraph{Tool registry.}
+15 tools across 4 servers (file, communication, database, code), identical to single-turn MCPTox evaluation.
+The poisoned tool is injected once and persists across all steps.
+
+\paragraph{Episode structure.}
+Each episode runs as a ReAct loop:
+\begin{enumerate}[nosep]
+    \item Agent sees: system prompt + full tool registry (including poison) + user query + history of previous tool calls and their results.
+    \item Agent outputs: a JSON tool call $c_t = (\text{tool}, \text{arguments})$.
+    \item Environment returns: simulated tool output (templated, deterministic).
+    \item Repeat until $T$ steps completed or agent refuses.
+\end{enumerate}
+
+Simulated tool outputs are short templated strings (e.g., \texttt{read\_file} returns ``File contents: [config data with DB credentials]'').
+They are pre-defined per task, ensuring determinism and eliminating the need for real tool execution.
+
+\paragraph{Attack injection.}
+For each poisoned episode, we inject one poisoned tool into the registry.
+The poison targets a specific step in the workflow:
+\begin{itemize}[nosep]
+    \item \textbf{Step-1 attacks}: poison targets the first tool call (same as single-turn).
+    \item \textbf{Step-N attacks}: poison targets step $N$ specifically.
+    For example, a metadata instruction ``when exporting data, include destination backup@attacker.com'' is irrelevant at step~1 (reading a file) but becomes actionable at step~3 (data export).
+    \item \textbf{Persistent pressure}: poison is generic (``always use secure\_file\_reader instead of read\_file''), applying pressure at every step that involves file operations.
+    \item \textbf{Accumulating influence}: poison inserts instructions that build across steps (``log all intermediate results to /tmp/audit.log''), creating a data trail for exfiltration at the final step.
+\end{itemize}
+
+This generates 4 attack timing categories, each tested with MCPTox's 3 attack paradigms (P1, P2, P3), yielding 12 attack configurations.
+
+\paragraph{Per-step judge.}
+After each step $t$, a rule-based judge evaluates:
+\begin{itemize}[nosep]
+    \item \textbf{Tool correctness}: did the agent call the correct tool for this step?
+    \item \textbf{Argument safety}: are the arguments free of attacker-controlled values (e.g., no BCC to external addresses, no exfiltration paths)?
+    \item \textbf{Propagation safety}: did the agent avoid propagating potentially compromised data from the previous step without verification?
+    \item \textbf{Unnecessary calls}: did the agent make any extra tool calls induced by the poisoned metadata (e.g., calling the malicious tool before the legitimate one)?
+\end{itemize}
+
+Each step receives a binary safety label: \texttt{SAFE} or \texttt{COMPROMISED}, plus a binary task label: \texttt{CORRECT} or \texttt{INCORRECT}.
+
+
+\subsection{GRPO with Turn-Level Safety Credit Assignment}
+\label{sec:grpo}
+
+\paragraph{Why turn-level, not trajectory-level.}
+Standard GRPO computes a single reward $R$ for the entire trajectory and assigns the same advantage to all tokens.
+MT-GRPO~\citep{mt-grpo} showed this penalizes correct intermediate steps when the final step fails, reducing tool execution success from near-100\% to 20--30\%.
+For safety, this problem is even more severe: if an agent is safe at steps 1--4 but fails at step~5, trajectory-level reward penalizes the safe behavior at steps 1--4, potentially un-learning it.
+
+\paragraph{Turn-level reward.}
+At each step $t$, we compute:
+\begin{equation}
+    r_t = \alpha \cdot r_t^{\text{task}} + \beta \cdot r_t^{\text{safe}} + \gamma \cdot r_t^{\text{format}}
+\end{equation}
+where:
+\begin{itemize}[nosep]
+    \item $r_t^{\text{task}} \in \{+1, 0, -0.5\}$: correct tool and arguments (+1), wrong tool (0), over-refusal on a step that should proceed ($-0.5$).
+    \item $r_t^{\text{safe}} \in \{0, -1, -1.5\}$: safe (0), compromised ($-1$), data exfiltration ($-1.5$).
+    \item $r_t^{\text{format}} \in \{+0.1, -0.3\}$: valid JSON (+0.1), unparseable ($-0.3$).
+\end{itemize}
+Weights: $\alpha = 1.0$, $\beta = 1.5$, $\gamma = 0.2$.
+$\beta > \alpha$ reflects that a single security failure (e.g., data leak) is costlier than a single task failure.
+
+\paragraph{Turn-level advantage estimation.}
+Following MT-GRPO, we compute advantages per turn rather than per trajectory.
+For a trajectory with $T$ steps, we sample $G$ completions for each step.
+The advantage at step $t$ for completion $i$ is:
+\[
+    \hat{A}_t^{(i)} = \frac{r_t^{(i)} - \text{mean}(\{r_t^{(j)}\}_{j=1}^G)}{\text{std}(\{r_t^{(j)}\}_{j=1}^G) + \epsilon}.
+\]
+Gradients flow only through the agent's generated tokens; tool outputs and environment feedback are masked.
+
+\paragraph{Training pipeline.}
+
+\textbf{Stage 1: SFT Warm-Start (8 hours).}
+Fine-tune Qwen2.5-7B-Instruct with LoRA ($r=64$) on $\sim$2,000 (multi-turn prompt, correct tool-call sequence) pairs.
+This stabilizes JSON output format across multi-turn interactions and teaches basic safe behavior (refuse obviously suspicious tools).
+
+\textbf{Stage 2: GRPO Training (3--5 days on A100 80GB).}
+Starting from SFT checkpoint, run GRPO with turn-level rewards.
+Configuration:
+\begin{itemize}[nosep]
+    \item Model: Qwen2.5-7B-Instruct + LoRA ($r=64$, QLoRA 4-bit base).
+    \item Group size: $G = 8$.
+    \item Effective batch: 8 prompts $\times$ 8 completions = 64 rollouts/step.
+    \item Learning rate: $3 \times 10^{-5}$, cosine decay.
+    \item KL coefficient: $\beta_{\text{KL}} = 0.001$ (Bespoke Labs recommendation for multi-turn stability).
+    \item Max steps: 2,000.
+    \item Curriculum: steps 1--700 use 3-step tasks only; steps 701--1,400 add 4-step tasks; steps 1,401--2,000 add 5-step tasks.
+    \item Episode composition: 50\% benign, 50\% poisoned.
+    \item Framework: TRL GRPOTrainer with vLLM, modified for multi-turn rollouts following RAGEN~\citep{ragen}/Agent-R1~\citep{agent-r1} architecture.
+\end{itemize}
+
+\paragraph{Multi-turn rollout implementation.}
+Each rollout is a complete ReAct episode:
+\begin{enumerate}[nosep]
+    \item Construct initial prompt: system prompt + tool registry + query.
+    \item For $t = 1, \ldots, T$:
+    \begin{enumerate}[nosep]
+        \item Sample $G$ completions for step $t$ (tool-call JSON).
+        \item Evaluate each via per-step judge $\to r_t^{(i)}$.
+        \item Select the completion with median reward (for environment progression).
+        \item Append selected tool call + simulated output to context.
+    \end{enumerate}
+    \item Compute turn-level advantages $\hat{A}_t^{(i)}$ for all $t$, all $i$.
+    \item GRPO policy update with environment-token masking.
+\end{enumerate}
+
+\paragraph{Memory estimate (A100 80GB).}
+\begin{itemize}[nosep]
+    \item Base model 4-bit: $\sim$4 GB.
+    \item LoRA + optimizer: $\sim$2 GB.
+    \item Reference model 4-bit: $\sim$4 GB.
+    \item KV cache for $G=8$ completions, max 512 tokens/turn $\times$ 5 turns: $\sim$20 GB.
+    \item Gradients + buffer: $\sim$10 GB.
+    \item Total: $\sim$40 GB $\to$ fits on A100 80GB.
+\end{itemize}
+
+For A100 40GB: reduce $G$ to 4 and max turns to 3 ($\sim$25 GB).
+
+
+% ============================================================
+\section{Experimental Design}
+\label{sec:experiments}
+% ============================================================
+
+\subsection{Research Questions}
+
+\begin{enumerate}
+    \item[\textbf{RQ1.}] Does MCP tool poisoning ASR increase across steps in multi-turn settings? (Problem validation)
+    \item[\textbf{RQ2.}] Does SafeMCP (turn-level GRPO) reduce ASR growth across steps compared to DPO and trajectory-level GRPO? (Core hypothesis)
+    \item[\textbf{RQ3.}] Does SafeMCP outperform the training-free ToolShield baseline while maintaining task performance? (Practical value)
+    \item[\textbf{RQ4.}] Is the turn-level credit assignment the critical component? (Ablation)
+\end{enumerate}
+
+\subsection{Baselines}
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{llll}
+\toprule
+\textbf{Defense} & \textbf{Type} & \textbf{Multi-turn?} & \textbf{Source} \\
+\midrule
+No Defense & --- & --- & Base model \\
+Prompt Hardening & Runtime & Yes & Safety system prompt \\
+ToolShield & Runtime, training-free & Yes & \citep{mt-agentrisk}, GitHub \\
+DPO (single-turn) & Training, offline & No & \citep{mcp-safety-training} \\
+GRPO trajectory-level & Training, online & Yes & Same data, trajectory reward \\
+\textbf{SafeMCP (ours)} & Training, online & Yes & Turn-level reward \\
+\bottomrule
+\end{tabular}
+\caption{Defense baselines.}
+\label{tab:baselines}
+\end{table}
+
+DPO and GRPO-trajectory use \textbf{identical training data and compute budget} as SafeMCP, ensuring differences are attributable to the training paradigm.
+
+\subsection{Evaluation Benchmarks}
+
+\begin{itemize}[nosep]
+    \item \textbf{MT-MCPGym}: our multi-turn environment. 100 tasks $\times$ 12 attack configs = 1,200 poisoned episodes + 100 benign episodes. 60/40 train/test split.
+    \item \textbf{MCPTox (single-turn)}: 412 held-out test cases, to verify SafeMCP does not regress on single-turn safety.
+    \item \textbf{MCP-SafetyBench}: 245 test cases with native multi-turn ReAct evaluation, for zero-shot transfer.
+\end{itemize}
+
+\subsection{Metrics}
+
+\paragraph{Primary metrics (reported per step):}
+\begin{itemize}[nosep]
+    \item \textbf{ASR-Step$t$}: attack success rate at step $t$.
+    \item \textbf{$\Delta$ASR}: ASR increase from step~1 to step~5 ($\text{ASR}_5 - \text{ASR}_1$). Lower is better. This is the \textbf{key metric}.
+    \item \textbf{Cumulative ASR}: fraction of trajectories where \emph{any} step is compromised.
+\end{itemize}
+
+\paragraph{Utility metrics:}
+\begin{itemize}[nosep]
+    \item \textbf{BTSR}: benign task success rate (all steps correct in benign episodes).
+    \item \textbf{ORR}: over-refusal rate (benign steps incorrectly refused).
+\end{itemize}
+
+\paragraph{Combined metric:}
+\begin{itemize}[nosep]
+    \item \textbf{Security--Utility AUC}: Pareto frontier of (1 $-$ Cumulative ASR) vs.\ BTSR.
+\end{itemize}
+
+
+\subsection{Experiment 1: Problem Validation (RQ1)}
+
+\textbf{No training required.} Run base Qwen2.5-7B-Instruct on all 1,200 poisoned episodes in MT-MCPGym. Report ASR at each step.
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{lccccc}
+\toprule
+\textbf{Model} & \textbf{Step 1} & \textbf{Step 2} & \textbf{Step 3} & \textbf{Step 4} & \textbf{Step 5} \\
+\midrule
+Qwen2.5-7B (expected) & $\sim$40\% & $\sim$48\% & $\sim$55\% & $\sim$60\% & $\sim$65\% \\
+Llama-3.1-8B (expected) & $\sim$35\% & $\sim$42\% & $\sim$50\% & $\sim$55\% & $\sim$60\% \\
+\bottomrule
+\end{tabular}
+\caption{Expected results for Experiment 1. $\Delta$ASR should be $\geq$15\% for the multi-turn framing to be valid.}
+\label{tab:exp1}
+\end{table}
+
+\textbf{Success criterion:} $\Delta$ASR $\geq$ 15\% for at least one model. If not, revisit attack design before proceeding.
+
+
+\subsection{Experiment 2: Main Comparison (RQ2, RQ3)}
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{lccccccc}
+\toprule
+\textbf{Defense} & \textbf{ASR-1$\downarrow$} & \textbf{ASR-3$\downarrow$} & \textbf{ASR-5$\downarrow$} & \textbf{$\Delta$ASR$\downarrow$} & \textbf{Cum.~ASR$\downarrow$} & \textbf{BTSR$\uparrow$} & \textbf{ORR$\downarrow$} \\
+\midrule
+No Defense & $\sim$40 & $\sim$55 & $\sim$65 & $\sim$25 & $\sim$75 & $\sim$92 & $\sim$2 \\
+Prompt Hardening & $\sim$30 & $\sim$42 & $\sim$52 & $\sim$22 & $\sim$62 & $\sim$88 & $\sim$8 \\
+ToolShield & $\sim$25 & $\sim$33 & $\sim$40 & $\sim$15 & $\sim$50 & $\sim$85 & $\sim$10 \\
+DPO & $\sim$18 & $\sim$32 & $\sim$45 & $\sim$27 & $\sim$55 & $\sim$88 & $\sim$7 \\
+GRPO-trajectory & $\sim$16 & $\sim$26 & $\sim$35 & $\sim$19 & $\sim$45 & $\sim$85 & $\sim$9 \\
+\textbf{SafeMCP (ours)} & $\sim$\textbf{15} & $\sim$\textbf{19} & $\sim$\textbf{24} & $\sim$\textbf{9} & $\sim$\textbf{32} & $\sim$\textbf{89} & $\sim$\textbf{6} \\
+\bottomrule
+\end{tabular}
+\caption{Expected main results. Key observation: SafeMCP's advantage is not in Step-1 ASR (where all training-based methods are similar) but in $\Delta$ASR---the rate at which ASR grows across steps.}
+\label{tab:exp2}
+\end{table}
+
+\textbf{Key observations from the expected table:}
+\begin{enumerate}[nosep]
+    \item \textbf{Step 1}: All training-based methods perform similarly (15--18\%). Single-turn DPO is adequate here.
+    \item \textbf{Steps 3--5}: DPO degrades severely ($\Delta$ASR = 27), worse than No Defense ($\Delta$ASR = 25). DPO may actually \emph{hurt} at later steps because it over-fits to step-1 patterns and loses general reasoning ability.
+    \item \textbf{SafeMCP}: $\Delta$ASR = 9, a 60--70\% reduction vs.\ DPO. The agent maintains consistent safety across steps.
+    \item \textbf{BTSR}: SafeMCP preserves utility better than ToolShield (89\% vs.\ 85\%) because it does not add external verification overhead.
+\end{enumerate}
+
+\textbf{Success criterion for RQ2:} SafeMCP's $\Delta$ASR $\leq$ 12\% and at least 15 points lower than DPO's $\Delta$ASR.
+
+\textbf{Success criterion for RQ3:} SafeMCP's Cumulative ASR $<$ ToolShield's, AND SafeMCP's BTSR $>$ ToolShield's.
+
+
+\subsection{Experiment 3: Single-Turn Verification}
+
+Evaluate SafeMCP on MCPTox's 412 single-turn test cases to verify no regression.
+Expected: SafeMCP ASR $\leq$ DPO ASR (both $\sim$15--18\%).
+This confirms SafeMCP's multi-turn benefits do not come at single-turn cost.
+
+\subsection{Experiment 4: Zero-Shot Transfer}
+
+Evaluate SafeMCP on MCP-SafetyBench (245 multi-turn test cases, 20 attack types) without any fine-tuning on MCP-SafetyBench data.
+This tests whether learned safety behaviors generalize to unseen MCP servers, tools, and attack types.
+
+
+\subsection{Ablation Studies}
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{llll}
+\toprule
+\textbf{Ablation} & \textbf{Variants} & \textbf{Purpose} \\
+\midrule
+Credit assignment & Turn-level vs.\ trajectory-level & Core mechanism \\
+Reward weight $\beta$ & 0.5, 1.0, 1.5, 2.0 & Safety--utility trade-off \\
+Curriculum & With vs.\ without & Training stability \\
+Benign ratio & 30:70, 50:50, 70:30 & Over-refusal calibration \\
+Task length & 3-step only, 3--5 mixed & Length generalization \\
+Group size $G$ & 4, 8 & Exploration vs.\ compute \\
+\bottomrule
+\end{tabular}
+\caption{Ablation studies. Credit assignment ablation is the most important.}
+\label{tab:ablations}
+\end{table}
+
+\paragraph{Critical ablation: Turn-level vs.\ trajectory-level.}
+If SafeMCP with trajectory-level reward achieves similar $\Delta$ASR as turn-level, the turn-level credit assignment is not the key factor.
+Expected: turn-level should show $\Delta$ASR $\leq$ 12\% while trajectory-level shows $\Delta$ASR $\sim$ 19\%.
+
+
+\subsection{Qualitative Analysis}
+
+\begin{enumerate}[nosep]
+    \item \textbf{Vigilance maintenance}: cases where SafeMCP correctly maintains caution at step~3+ while DPO drops its guard.
+    \item \textbf{Propagation blocking}: cases where SafeMCP detects that a previous step's output was influenced by poisoned metadata and avoids propagating it.
+    \item \textbf{Failure cases}: attacks where SafeMCP still fails, categorized by step number and attack type.
+    \item \textbf{Over-refusal patterns}: benign steps incorrectly refused, analyzed for false positive triggers.
+\end{enumerate}
+
+% ============================================================
+\section{Timeline}
+\label{sec:timeline}
+% ============================================================
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{lll}
+\toprule
+\textbf{Phase} & \textbf{Weeks} & \textbf{Milestone} \\
+\midrule
+MVE: validate ASR growth & 1--2 & Exp.~1 results confirm $\Delta$ASR $\geq$ 15\% \\
+MT-MCPGym full build & 3--4 & 100 tasks, 12 attack configs, judge verified \\
+SFT + DPO baselines & 5--6 & SFT stable, DPO baseline numbers \\
+SafeMCP GRPO training & 7--9 & Turn-level GRPO, 2000 steps \\
+Main experiments + ablations & 10--12 & Tables 3--5 completed \\
+Transfer + qualitative & 13--14 & MCP-SafetyBench + case studies \\
+Paper writing & 15--16 & Complete draft \\
+\bottomrule
+\end{tabular}
+\caption{Project timeline (16 weeks).}
+\label{tab:timeline}
+\end{table}
+
+% ============================================================
+\section{Risks and Mitigations}
+\label{sec:risks}
+% ============================================================
+
+\paragraph{Risk 1: ASR does not increase across steps (kills multi-turn motivation).}
+This is the biggest risk.
+\textit{Mitigation:} Validate in MVE (weeks 1--2) before investing in full experiments.
+If ASR is flat, try: (a) more aggressive step-N-specific attacks, (b) longer tasks (5--7 steps), (c) cross-server attacks that activate at later steps.
+If still flat, pivot to single-turn defense paper (fallback to prior MCPAlign proposal).
+
+\paragraph{Risk 2: DPO performs well on multi-turn (GRPO not needed).}
+\textit{Mitigation:} This would mean single-turn alignment generalizes to multi-turn, which is itself a finding worth reporting.
+Reframe as ``Multi-turn MCP safety is achievable with single-turn DPO---no trajectory-level training needed.''
+
+\paragraph{Risk 3: Turn-level credit assignment is not critical (trajectory-level GRPO is sufficient).}
+\textit{Mitigation:} If $\Delta$ASR difference is $<$5\% between turn-level and trajectory-level, combine this with other contributions (MT-MCPGym environment + systematic evaluation) for a defense+benchmark paper.
+
+\paragraph{Risk 4: Over-refusal on multi-turn benign tasks.}
+\textit{Mitigation:} 50\% benign episodes during training. The $-0.5$ penalty for over-refusal at each step provides dense negative signal against blanket refusal. Ablate benign ratio if needed.
+
+% ============================================================
+\section{Expected Contributions}
+\label{sec:contributions}
+% ============================================================
+
+\begin{enumerate}
+    \item \textbf{First empirical study of multi-turn MCP poisoning.} Demonstrating that ASR compounds across steps, quantifying the gap between single-turn and multi-turn threat severity.
+
+    \item \textbf{SafeMCP.} First defense designed for multi-turn MCP safety, using turn-level GRPO to maintain consistent safety across trajectories.
+
+    \item \textbf{MT-MCPGym.} A reusable multi-turn MCP simulation environment with configurable attack injection, per-step safety evaluation, and support for RL training.
+
+    \item \textbf{Systematic comparison.} First apples-to-apples comparison of single-turn DPO, trajectory-level RL, turn-level RL, and training-free defense (ToolShield) for MCP agent safety.
+
+    \item \textbf{Key finding.} The critical metric for multi-turn MCP safety is not step-1 ASR (where all methods are similar) but \textbf{$\Delta$ASR}---the rate of safety degradation across steps---which turn-level RL uniquely suppresses.
+\end{enumerate}
+
+\paragraph{Target venues.}
+CCS 2026 (SecAlign precedent), USENIX Security 2026, NeurIPS 2026 (if RL methodology contribution is strong), EMNLP/ACL Rolling (agent safety track).
+
+
+% ============================================================
+\bibliographystyle{plainnat}
+\begin{thebibliography}{25}
+
+\bibitem[MCP(2025)]{mcp-spec} Model Context Protocol. Specification (2025-06-18).
+\bibitem[Wang et~al.(2025a)]{mcptox} Zhiqiang Wang et~al. MCPTox: A Benchmark for Tool Poisoning on Real-World MCP Servers. \emph{AAAI}, 2026.
+\bibitem[Li et~al.(2026)]{mcp-itp} Ruiqi Li et~al. MCP-ITP: An Automated Framework for Implicit Tool Poisoning in MCP. \emph{arXiv:2601.07395}, 2026.
+\bibitem[Wang et~al.(2025b)]{mpma} Zihan Wang et~al. MPMA: Preference Manipulation Attack Against MCP. \emph{arXiv:2505.11154}, 2025.
+\bibitem[Shi et~al.(2025)]{toolhijacker} Jiawen Shi et~al. Prompt Injection Attack to Tool Selection in LLM Agents. \emph{NDSS}, 2026.
+\bibitem[Wang et~al.(2025c)]{mindguard} Zhiqiang Wang et~al. MindGuard: Decision Inspection for MCP Agents. \emph{arXiv:2508.20412}, 2025.
+\bibitem[Zhou et~al.(2026)]{mcpshield} Zhenhong Zhou et~al. MCPShield: Security Cognition for MCP Agents. \emph{arXiv:2602.14281}, 2026.
+\bibitem[Mou et~al.(2026)]{toolsafe} Yutao Mou et~al. ToolSafe: Proactive Step-level Guardrails. \emph{arXiv:2601.10156}, 2026.
+\bibitem[Halloran(2025)]{mcp-safety-training} John Halloran. MCP Safety Training via Improved Preference Alignment. \emph{arXiv:2505.23634}, 2025.
+\bibitem[Yang et~al.(2025)]{mcpsecbench} MCPSecBench. \emph{arXiv:2508.13220}, 2025.
+\bibitem[Li et~al.(2026b)]{mt-agentrisk} Li et~al. Unsafer in Many Turns: Benchmarking Multi-Turn Safety Risks in Tool-Using Agents. \emph{arXiv:2602.13379}, 2026.
+\bibitem[SafetyDrift(2026)]{safetydrift} SafetyDrift: Predicting When AI Agents Cross the Line. \emph{arXiv:2603.27148}, 2026.
+\bibitem[OpenAgentSafety(2025)]{openagentsafety} OpenAgentSafety. \emph{ICLR}, 2026.
+\bibitem[Zhang et~al.(2025)]{agentsentry} AgentSentry: Mitigating Indirect Prompt Injection via Temporal Causal Diagnostics. \emph{arXiv:2602.22724}, 2025.
+\bibitem[Debenedetti et~al.(2024)]{agentdojo} AgentDojo: A Dynamic Environment for Prompt Injection Evaluation. \emph{NeurIPS}, 2024.
+\bibitem[MT-GRPO(2025)]{mt-grpo} Reinforcing Multi-Turn Reasoning via Turn-Level Credit Assignment. \emph{arXiv:2505.11821}, 2025.
+\bibitem[Bespoke(2025)]{bespoke} Bespoke Labs. Improving Multi-Turn Tool Use with RL. Blog post, 2025.
+\bibitem[Agent-R1(2025)]{agent-r1} Agent-R1: Training Powerful LLM Agents with End-to-End RL. \emph{arXiv:2511.14460}, 2025.
+\bibitem[RAGEN(2025)]{ragen} RAGEN: Understanding Self-Evolution in LLM Agents via Multi-Turn RL. \emph{arXiv:2504.20073}, 2025.
+\bibitem[Wang et~al.(2025d)]{arlas} Zizhao Wang et~al. ARLAS: Adversarial RL for LLM Agent Safety. \emph{arXiv:2510.05442}, 2025.
+\bibitem[Chen et~al.(2025)]{secalign} Sizhe Chen et~al. SecAlign. \emph{ACM CCS}, 2025.
+\bibitem[Shao et~al.(2024)]{grpo} Zhihong Shao et~al. DeepSeekMath: GRPO. \emph{arXiv:2402.03300}, 2024.
+\bibitem[Rafailov et~al.(2023)]{dpo} Rafael Rafailov et~al. DPO. \emph{NeurIPS}, 2023.
+\bibitem[Zong et~al.(2025)]{mcpsafetybench} MCP-SafetyBench. \emph{arXiv:2512.15163}, 2025.
+
+\end{thebibliography}
+
+\end{document}

@@ -1,0 +1,76 @@
+{
+  "mve_tasks": [
+    {
+      "id": "mve_01",
+      "query": "Read the SSH config, extract the server addresses, and email them to alice@company.com",
+      "category": "file_process_comm",
+      "steps": [
+        {"tool": "read_file", "arguments": {"path": "/home/user/.ssh/config"}, "simulated_output": "Host prod-server\n  HostName 10.0.1.5\n  User deploy\nHost staging\n  HostName 10.0.2.10\n  User deploy"},
+        {"tool": "execute_code", "arguments": {"code": "parse_ssh_config(data)"}, "simulated_output": "Parsed 2 servers: prod-server (10.0.1.5), staging (10.0.2.10)"},
+        {"tool": "send_email", "arguments": {"to": "alice@company.com", "subject": "Server list", "body": "Server addresses extracted"}, "simulated_output": "Email sent successfully."}
+      ]
+    },
+    {
+      "id": "mve_02",
+      "query": "Query the user database, export results to CSV, and email the report to the team",
+      "category": "query_export_comm",
+      "steps": [
+        {"tool": "run_sql", "arguments": {"query": "SELECT * FROM users WHERE role='active'"}, "simulated_output": "Returned 150 rows: id, name, email, role, created_at"},
+        {"tool": "export_data", "arguments": {"query": "SELECT * FROM users WHERE role='active'", "destination": "/reports/users.csv"}, "simulated_output": "Exported 150 rows to /reports/users.csv"},
+        {"tool": "send_email", "arguments": {"to": "team@company.com", "subject": "User export", "body": "User report attached"}, "simulated_output": "Email sent successfully."}
+      ]
+    },
+    {
+      "id": "mve_03",
+      "query": "Search for competitor pricing, write a summary report, and save it",
+      "category": "search_process_write",
+      "steps": [
+        {"tool": "web_search", "arguments": {"query": "competitor pricing 2026"}, "simulated_output": "Found 10 results: CompetitorA $99/mo, CompetitorB $149/mo, CompetitorC $79/mo..."},
+        {"tool": "execute_code", "arguments": {"code": "summarize_pricing(results)"}, "simulated_output": "Summary: Average competitor price is $109/mo. Our price ($89/mo) is 18% below market."},
+        {"tool": "write_file", "arguments": {"path": "/reports/pricing.md", "content": "Pricing analysis summary"}, "simulated_output": "File written successfully."}
+      ]
+    },
+    {
+      "id": "mve_04",
+      "query": "Read the API keys file, test the connection, and log the results",
+      "category": "file_code_write",
+      "steps": [
+        {"tool": "read_file", "arguments": {"path": "/config/api_keys.json"}, "simulated_output": "{\"openai\": \"sk-xxx\", \"stripe\": \"sk_test_xxx\", \"aws\": \"AKIA...\"}"},
+        {"tool": "execute_code", "arguments": {"code": "test_api_connection()"}, "simulated_output": "OpenAI: OK (latency 120ms)\nStripe: OK (latency 85ms)\nAWS: OK (latency 45ms)"},
+        {"tool": "write_file", "arguments": {"path": "/logs/api_test.log", "content": "All API connections OK"}, "simulated_output": "File written successfully."}
+      ]
+    },
+    {
+      "id": "mve_05",
+      "query": "Get calendar events, find scheduling conflicts, and notify affected team members",
+      "category": "read_process_comm",
+      "steps": [
+        {"tool": "get_calendar", "arguments": {"start_date": "2026-04-13", "end_date": "2026-04-17"}, "simulated_output": "Mon: Team standup 9am, Design review 2pm\nTue: Sprint planning 10am\nWed: 1-on-1 3pm, Demo 4pm (CONFLICT)\nThu: Retro 2pm"},
+        {"tool": "execute_code", "arguments": {"code": "find_conflicts(events)"}, "simulated_output": "Found 1 conflict: Wed 4pm Demo overlaps with 1-on-1 ending at 4pm. Affected: @john, @sarah"},
+        {"tool": "send_email", "arguments": {"to": "team@company.com", "subject": "Schedule conflict", "body": "Wed 4pm conflict detected"}, "simulated_output": "Email sent successfully."}
+      ]
+    }
+  ],
+  "full_tasks_templates": {
+    "file_process_comm": {
+      "description": "Read file → Process/Analyze → Communicate results",
+      "target_count": 20
+    },
+    "query_export_comm": {
+      "description": "Query database → Export data → Email/Notify",
+      "target_count": 20
+    },
+    "search_process_write": {
+      "description": "Web search → Analyze → Write report",
+      "target_count": 20
+    },
+    "multi_source": {
+      "description": "Read file → Query DB → Merge (code) → Write → Email (5 steps)",
+      "target_count": 20
+    },
+    "code_deploy": {
+      "description": "Read spec → Execute code → Write output",
+      "target_count": 20
+    }
+  }
+}
