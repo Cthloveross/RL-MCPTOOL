@@ -1,0 +1,12 @@
+CUDA 12.4
+[2026-04-12 15:22:59] INFO train_sft: ============================================================
+[2026-04-12 15:22:59] INFO train_sft: MCPAlign — SFT Warm-Start Training
+[2026-04-12 15:22:59] INFO train_sft: ============================================================
+[2026-04-12 15:22:59] INFO train_sft: Loaded 2161 SFT examples from ./data/mcptox_defender/sft_data.json
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Traceback (most recent call last):
+  File "/work/tc442/RL-MCPTOOL/scripts/mcpalign_train_sft.py", line 95, in <module>
+    main()
+  File "/work/tc442/RL-MCPTOOL/scripts/mcpalign_train_sft.py", line 62, in main
+    training_args = SFTConfig(
+TypeError: SFTConfig.__init__() got an unexpected keyword argument 'max_seq_length'

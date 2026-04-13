@@ -1,0 +1,2 @@
+CUDA 12.4
+[2026-04-11T15:58:14.546] error: *** JOB 45364685 ON dcc-wrapplab-gpu-ferc-g-aa32-13 CANCELLED AT 2026-04-11T15:58:14 DUE to SIGNAL Terminated ***

@@ -1,0 +1,38 @@
+{
+  "sft": {
+    "total": 2161,
+    "valid_json": 2161,
+    "has_tool_and_args": 2161,
+    "t3_leaked": 0,
+    "by_type": {
+      "benign": 875,
+      "poisoned_1": 254,
+      "poisoned_2": 1032
+    },
+    "by_augmentation": {
+      "defensive_tokens": 245,
+      "none": 888,
+      "prompt_hardening": 888,
+      "arg_variant": 140
+    }
+  },
+  "dpo": {
+    "total": 1758,
+    "valid_json_pairs": 1758,
+    "chosen_has_tool": 1758,
+    "rejected_has_tool": 1758,
+    "same_tool_chosen_rejected": 38,
+    "t3_leaked": 0,
+    "by_type": {
+      "poisoned_1": 254,
+      "poisoned_2": 1032,
+      "benign": 472
+    },
+    "by_rejected_source": {
+      "real_model_response": 1066,
+      "synthetic": 220,
+      "synthetic_wrong_tool": 472
+    }
+  },
+  "errors": []
+}

@@ -1,0 +1,2 @@
+CUDA 12.4
+[2026-04-11T15:55:32.298] error: *** JOB 45364629 ON dcc-vossenlab-gpu-ferc-s-g36-19 CANCELLED AT 2026-04-11T15:55:32 DUE to SIGNAL Terminated ***

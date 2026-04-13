@@ -1,0 +1,16 @@
+# MCPTox Zero-Shot Defense Baseline
+# Evaluates Qwen-7B on MCPTox attacks under 3 defense conditions
+# Purpose: establish baseline for MCPDefender paper
+
+experiment:
+  name: "mcptox_defense_baseline"
+  seed: 42
+  output_dir: "./experiments/mcptox_defense_baseline"
+
+agent:
+  model_name: "Qwen/Qwen2.5-7B-Instruct"
+  quantization:
+    load_in_4bit: true
+    bnb_4bit_compute_dtype: "float16"
+    bnb_4bit_quant_type: "nf4"
+    bnb_4bit_use_double_quant: true

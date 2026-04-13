@@ -1,0 +1,45 @@
+CUDA 12.4
+[2026-04-11 16:02:04] INFO qwen3_run: ============================================================
+[2026-04-11 16:02:04] INFO qwen3_run: MCPTox Qwen3-8B inference
+[2026-04-11 16:02:04] INFO qwen3_run: Mode: all, Think: True
+[2026-04-11 16:02:04] INFO qwen3_run: ============================================================
+[2026-04-11 16:02:04] INFO qwen3_run: Sampled 150 instances
+[2026-04-11 16:02:04] INFO qwen3_run: Loading Qwen/Qwen3-8B (4-bit) ...
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Loading weights:   0%|          | 0/399 [00:00<?, ?it/s]Loading weights:   0%|          | 1/399 [00:00<01:13,  5.40it/s]Loading weights:   1%|          | 2/399 [00:00<01:14,  5.35it/s]Loading weights:   3%|▎         | 12/399 [00:00<00:11, 34.29it/s]Loading weights:   7%|▋         | 28/399 [00:00<00:05, 70.07it/s]Loading weights:  12%|█▏        | 49/399 [00:00<00:03, 108.66it/s]Loading weights:  18%|█▊        | 70/399 [00:00<00:02, 134.95it/s]Loading weights:  22%|██▏       | 87/399 [00:00<00:02, 144.91it/s]Loading weights:  26%|██▌       | 104/399 [00:01<00:01, 150.62it/s]Loading weights:  31%|███▏      | 125/399 [00:01<00:01, 164.60it/s]Loading weights:  36%|███▌      | 144/399 [00:01<00:01, 169.51it/s]Loading weights:  41%|████      | 162/399 [00:01<00:01, 168.02it/s]Loading weights:  45%|████▌     | 181/399 [00:01<00:01, 167.18it/s]Loading weights:  50%|████▉     | 199/399 [00:01<00:01, 170.48it/s]Loading weights:  54%|█████▍    | 217/399 [00:01<00:01, 163.99it/s]Loading weights:  59%|█████▉    | 236/399 [00:01<00:00, 164.77it/s]Loading weights:  64%|██████▍   | 257/399 [00:01<00:00, 171.07it/s]Loading weights:  69%|██████▉   | 276/399 [00:01<00:00, 175.16it/s]Loading weights:  74%|███████▎  | 294/399 [00:02<00:00, 173.20it/s]Loading weights:  78%|███████▊  | 313/399 [00:02<00:00, 177.56it/s]Loading weights:  84%|████████▎ | 334/399 [00:02<00:00, 185.92it/s]Loading weights:  88%|████████▊ | 353/399 [00:02<00:00, 185.66it/s]Loading weights:  93%|█████████▎| 372/399 [00:02<00:00, 184.50it/s]Loading weights:  98%|█████████▊| 391/399 [00:02<00:00, 172.57it/s]Loading weights: 100%|██████████| 399/399 [00:02<00:00, 150.31it/s]
+[2026-04-11 16:02:14] INFO qwen3_run: Model loaded
+[2026-04-11 16:02:14] INFO qwen3_run: ============================================================
+[2026-04-11 16:02:14] INFO qwen3_run: Defense mode: no_defense
+[2026-04-11 16:02:14] INFO qwen3_run: ============================================================
+The following generation flags are not valid and may be ignored: ['temperature', 'top_p', 'top_k']. Set `TRANSFORMERS_VERBOSITY=info` for more details.
+[2026-04-11 16:13:47] INFO qwen3_run:   [no_defense] 20/150  think_tags=20/20  avg_raw_len=2540
+[2026-04-11 16:24:02] INFO qwen3_run:   [no_defense] 40/150  think_tags=40/40  avg_raw_len=2365
+[2026-04-11 16:34:47] INFO qwen3_run:   [no_defense] 60/150  think_tags=60/60  avg_raw_len=2299
+[2026-04-11 16:48:05] INFO qwen3_run:   [no_defense] 80/150  think_tags=80/80  avg_raw_len=2456
+[2026-04-11 17:02:27] INFO qwen3_run:   [no_defense] 100/150  think_tags=100/100  avg_raw_len=2615
+[2026-04-11 17:08:08] INFO qwen3_run:   [no_defense] 120/150  think_tags=120/120  avg_raw_len=2411
+[2026-04-11 17:31:03] INFO qwen3_run:   [no_defense] 140/150  think_tags=134/140  avg_raw_len=2814
+[2026-04-11 17:35:02] INFO qwen3_run:   [no_defense] 150/150  think_tags=144/150  avg_raw_len=2745
+[2026-04-11 17:35:02] INFO qwen3_run: ============================================================
+[2026-04-11 17:35:02] INFO qwen3_run: Defense mode: prompt_hardening
+[2026-04-11 17:35:02] INFO qwen3_run: ============================================================
+[2026-04-11 17:43:55] INFO qwen3_run:   [prompt_hardening] 20/150  think_tags=20/20  avg_raw_len=1979
+[2026-04-11 17:51:46] INFO qwen3_run:   [prompt_hardening] 40/150  think_tags=40/40  avg_raw_len=1841
+[2026-04-11 18:00:56] INFO qwen3_run:   [prompt_hardening] 60/150  think_tags=60/60  avg_raw_len=1898
+[2026-04-11 18:06:31] INFO qwen3_run:   [prompt_hardening] 80/150  think_tags=80/80  avg_raw_len=1732
+[2026-04-11 18:13:43] INFO qwen3_run:   [prompt_hardening] 100/150  think_tags=100/100  avg_raw_len=1712
+[2026-04-11 18:18:49] INFO qwen3_run:   [prompt_hardening] 120/150  think_tags=120/120  avg_raw_len=1633
+[2026-04-11 18:38:49] INFO qwen3_run:   [prompt_hardening] 140/150  think_tags=134/140  avg_raw_len=2057
+[2026-04-11 18:46:48] INFO qwen3_run:   [prompt_hardening] 150/150  think_tags=144/150  avg_raw_len=2166
+[2026-04-11 18:46:48] INFO qwen3_run: ============================================================
+[2026-04-11 18:46:48] INFO qwen3_run: Defense mode: defensive_tokens
+[2026-04-11 18:46:48] INFO qwen3_run: ============================================================
+[2026-04-11 18:59:48] INFO qwen3_run:   [defensive_tokens] 20/150  think_tags=20/20  avg_raw_len=2895
+[2026-04-11 19:07:23] INFO qwen3_run:   [defensive_tokens] 40/150  think_tags=40/40  avg_raw_len=2291
+[2026-04-11 19:17:24] INFO qwen3_run:   [defensive_tokens] 60/150  think_tags=60/60  avg_raw_len=2234
+[2026-04-11 19:24:35] INFO qwen3_run:   [defensive_tokens] 80/150  think_tags=80/80  avg_raw_len=2073
+[2026-04-11 19:34:01] INFO qwen3_run:   [defensive_tokens] 100/150  think_tags=100/100  avg_raw_len=2088
+[2026-04-11 19:39:15] INFO qwen3_run:   [defensive_tokens] 120/150  think_tags=120/120  avg_raw_len=1950
+[2026-04-11 20:02:04] INFO qwen3_run:   [defensive_tokens] 140/150  think_tags=134/140  avg_raw_len=2436
+[2026-04-11 20:09:33] INFO qwen3_run:   [defensive_tokens] 150/150  think_tags=144/150  avg_raw_len=2505
+[2026-04-11 20:09:33] INFO qwen3_run: Saved 450 rows to experiments/mcptox_qwen3/qwen3_responses_all.json
