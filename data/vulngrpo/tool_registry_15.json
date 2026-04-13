@@ -1,0 +1,48 @@
+{
+  "file_server": {
+    "tools": [
+      {"name": "read_file", "description": "Read contents of a file given its path.", "category": "read", "risk": "low",
+       "parameters": {"path": {"type": "string", "description": "File path to read"}}},
+      {"name": "write_file", "description": "Write content to a file at the specified path.", "category": "write", "risk": "medium",
+       "parameters": {"path": {"type": "string", "description": "File path"}, "content": {"type": "string", "description": "Content to write"}}},
+      {"name": "list_dir", "description": "List files and subdirectories in a directory.", "category": "read", "risk": "low",
+       "parameters": {"path": {"type": "string", "description": "Directory path"}}},
+      {"name": "delete_file", "description": "Delete a file at the specified path.", "category": "privileged", "risk": "high",
+       "parameters": {"path": {"type": "string", "description": "File path to delete"}}}
+    ]
+  },
+  "comm_server": {
+    "tools": [
+      {"name": "send_email", "description": "Send an email to a recipient with subject and body.", "category": "communicate", "risk": "medium",
+       "parameters": {"to": {"type": "string", "description": "Recipient email"}, "subject": {"type": "string", "description": "Email subject"}, "body": {"type": "string", "description": "Email body"}}},
+      {"name": "search_contacts", "description": "Search contacts by name or email.", "category": "read", "risk": "low",
+       "parameters": {"query": {"type": "string", "description": "Search query"}}},
+      {"name": "get_calendar", "description": "Get calendar events for a date range.", "category": "read", "risk": "low",
+       "parameters": {"start_date": {"type": "string", "description": "Start date"}, "end_date": {"type": "string", "description": "End date"}}},
+      {"name": "web_search", "description": "Search the web for information.", "category": "read", "risk": "low",
+       "parameters": {"query": {"type": "string", "description": "Search query"}}},
+      {"name": "create_note", "description": "Create a new note with a title and content.", "category": "write", "risk": "medium",
+       "parameters": {"title": {"type": "string", "description": "Note title"}, "content": {"type": "string", "description": "Note content"}}},
+      {"name": "set_reminder", "description": "Set a reminder for a specified date and time.", "category": "write", "risk": "medium",
+       "parameters": {"message": {"type": "string", "description": "Reminder message"}, "datetime": {"type": "string", "description": "Reminder date and time"}}}
+    ]
+  },
+  "db_server": {
+    "tools": [
+      {"name": "run_sql", "description": "Execute a SQL query on the database.", "category": "privileged", "risk": "high",
+       "parameters": {"query": {"type": "string", "description": "SQL query to execute"}}},
+      {"name": "create_table", "description": "Create a new database table with given schema.", "category": "privileged", "risk": "high",
+       "parameters": {"table_name": {"type": "string", "description": "Table name"}, "columns": {"type": "object", "description": "Column definitions"}}},
+      {"name": "export_data", "description": "Export query results to a file.", "category": "write", "risk": "medium",
+       "parameters": {"query": {"type": "string", "description": "SQL query"}, "destination": {"type": "string", "description": "Output file path"}}}
+    ]
+  },
+  "code_server": {
+    "tools": [
+      {"name": "execute_code", "description": "Run Python code in a sandboxed environment.", "category": "privileged", "risk": "high",
+       "parameters": {"code": {"type": "string", "description": "Python code to execute"}}},
+      {"name": "install_package", "description": "Install a Python package via pip.", "category": "privileged", "risk": "high",
+       "parameters": {"package_name": {"type": "string", "description": "Package name to install"}}}
+    ]
+  }
+}

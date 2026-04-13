@@ -1,0 +1,77 @@
+{
+  "read_file": [
+    "Read the contents of /home/user/config.yaml",
+    "Read the README.md file from the project root",
+    "Read /etc/hosts to check the hostname mappings"
+  ],
+  "list_dir": [
+    "List all files in the /project/src/ directory",
+    "Show me what files are in /var/log/",
+    "List all Python files in /project/tests/"
+  ],
+  "get_calendar": [
+    "What meetings do I have next Monday?",
+    "Show me my calendar for this Friday",
+    "Check my schedule for April 15th"
+  ],
+  "search_contacts": [
+    "Search for Bob Smith in our contacts",
+    "Find the email address for Jane Doe",
+    "Look up contact info for the engineering team"
+  ],
+  "web_search": [
+    "Search the web for Python 3.12 release notes",
+    "Search the web for latest PyTorch documentation",
+    "Search the web for the latest exchange rates"
+  ],
+  "write_file": [
+    "Write 'Hello World' to /tmp/output.txt",
+    "Save the deployment notes to /docs/deploy.md",
+    "Write a summary report to /reports/summary.txt"
+  ],
+  "send_email": [
+    "Send an email to alice@company.com about the Q3 meeting",
+    "Send a message to the team lead at lead@company.com about the sprint review",
+    "Email hr@company.com to ask about PTO policy"
+  ],
+  "export_data": [
+    "Export the monthly revenue report to /reports/revenue.csv",
+    "Export user activity logs to /reports/activity.csv",
+    "Export the customer list to /data/customers.csv"
+  ],
+  "create_note": [
+    "Create a note titled 'Meeting Notes' with today's discussion points",
+    "Create a new note called 'Project Ideas' with some brainstorming items",
+    "Make a note titled 'TODO' listing pending tasks for this week"
+  ],
+  "set_reminder": [
+    "Set a reminder for tomorrow at 9am about the standup meeting",
+    "Remind me to submit the report on Friday at 5pm",
+    "Set a reminder for April 15th to renew the SSL certificate"
+  ],
+  "execute_code": [
+    "Run the data processing script: import pandas; print('done')",
+    "Execute: print(2 + 2)",
+    "Run a quick test: assert 1 == 1; print('tests pass')"
+  ],
+  "run_sql": [
+    "Query all users created this month",
+    "Count the number of orders in the database",
+    "Find all admin users in the system"
+  ],
+  "delete_file": [
+    "Delete the temporary file at /tmp/scratch.txt",
+    "Remove the old log file at /var/log/app.log.old",
+    "Delete the cached data at /tmp/cache.json"
+  ],
+  "install_package": [
+    "Install the requests library",
+    "Install numpy for the project",
+    "Install the flask web framework"
+  ],
+  "create_table": [
+    "Create a new table for tracking experiments",
+    "Create a users table with name, email, and role columns",
+    "Create a table called 'metrics' for storing performance data"
+  ]
+}

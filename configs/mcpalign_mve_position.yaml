@@ -1,0 +1,45 @@
+# Position-Controlled MVE Configuration
+# Tests whether ASR increases with step position for the SAME tool (read_file)
+# Safety warning OFF to raise baseline ASR
+
+experiment:
+  name: "mcpalign_mve_position"
+  seed: 42
+  output_dir: "./experiments/mcpalign_mve_position"
+  log_to_wandb: false
+
+agent:
+  model_name: "Qwen/Qwen2.5-3B-Instruct"
+  quantization:
+    load_in_4bit: true
+    bnb_4bit_compute_dtype: "float16"
+    bnb_4bit_quant_type: "nf4"
+    bnb_4bit_use_double_quant: true
+  lora:
+    rank: 64
+    alpha: 128
+    dropout: 0.05
+    target_modules:
+      - "q_proj"
+      - "k_proj"
+      - "v_proj"
+      - "o_proj"
+      - "gate_proj"
+      - "up_proj"
+      - "down_proj"
+
+data:
+  tool_registry_path: "./data/mcpalign/tool_registry.json"
+  multistep_tasks_path: "./data/mcpalign/position_controlled_tasks.json"
+  attack_templates_dir: "./data/mcpalign/attack_templates/"
+
+environment:
+  attack_families: ["P1"]
+  include_safety_warning: false
+
+generation:
+  do_sample: true
+  temperature: 0.7
+  top_p: 0.9
+  max_new_tokens: 256
+  num_repeats: 3

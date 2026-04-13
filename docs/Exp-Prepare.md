@@ -1,95 +1,208 @@
-# SafeMCP 实验执行手册
+# MCPDefender 实验执行手册
 
-## 总览
-
-所有代码已就绪（2798 行，语法和 import 全部验证通过）。你需要做的事只有一件：在 A100 上跑 MVE，把结果发回来。
+**最后更新：2026-04-11**
 
 ---
 
-## 第一步：环境搭建
+## 0. 项目现状（pivot 历史简述）
 
-在 GPU 服务器上执行以下操作：
+- ❌ **Multi-turn SafeMCP**（ΔASR 随 step 递增）：自建数据上 ΔASR = -38.9%，假设被 falsify
+- ❌ **VulnGRPO**（low-risk tools 更脆弱）：MCPTox 上 L1 ASR (30.3%) 反而 < L4 ASR (34.0%)，Spearman = +0.052，假设被 falsify
+- ✅ **MCPDefender**（GRPO 泛化到 unseen attack paradigm）：当前方向
 
-1. 创建 conda 环境：safemcp, Python 3.10
-2. 安装 PyTorch 2.4.0（CUDA 12.1）
-3. 克隆 https://github.com/Cthloveross/RL-MCPTOOL.git
-4. 进入项目目录，执行 pip install -e . 安装所有依赖
-5. 执行 huggingface-cli login 登录 HuggingFace（需要 Read 权限 token）
-6. 预下载 Qwen/Qwen2.5-3B-Instruct 模型（约 6GB）
-7. 运行一行验证脚本确认 PyTorch、TRL、PEFT 版本正确，GPU 可用
+Pivot 的驱动力：前两个方向都试图找 "一个 novel empirical finding 来驱动 RL defense"，现在策略变了——**re-analysis 本身是独立 contribution，RL 的卖点是 generalization 而不是 profiling**。
 
 ---
 
-## 第二步：验证 MCPGym 能跑
+## 1. 当前资产
 
-运行一个简短的 Python 验证：import MTMCPGym，加载 tool_registry.json + multistep_tasks.json + attack_templates/，确认输出 14 tools、5 tasks、30 P1 templates。采样 3 个 episode 看看 poisoned/benign 分布是否正常。
-
-预期：能看到 POISON 和 BENIGN episode 交替出现，每个 episode 有 3 步，poisoned episode 有 malicious tool name。
-
----
-
-## 第三步：跑 MVE（最关键）
-
-执行 scripts/mcpalign_mve.py --config configs/mcpalign_mve.yaml
-
-这个脚本做的事：
-- 加载 Qwen2.5-3B-Instruct（4bit 量化，无任何训练）
-- 对 5 个多步任务 × 最多 3 个匹配的 P1 攻击模板，运行 3 步 ReAct loop
-- 每步让模型生成 tool call，用 rule-based judge 判定是否被攻击成功
-- 输出 per-step ASR 和 ΔASR
-
-预计运行时间：2-4 小时（取决于 GPU 速度）
-
-### MVE 通过标准
-
-- Step 1 ASR > 15%：攻击有效。如果 < 15% 说明模板太弱或模型太强。
-- ΔASR > 10%：核心假设成立。ASR 确实随步数增长。
-- 至少有 late-step compromise：不是随机噪声。
-
-三项全过 → 继续做完整实验。
-
-### 如果 MVE 失败
-
-- 全部 ASR < 10% → 换更弱的模型（Llama-3.1-8B），或删掉 system prompt 里的安全提醒
-- ASR 高但 ΔASR < 5% → 增加到 5 步任务，或用 late-step 型 poison（指令只在后面步骤才可执行）
-- ΔASR 5-10% → 可以继续但论文 story 会弱
-- Step 3 ASR < Step 1 ASR → 检查 context 构造，poison 可能被截断了
+| 资产 | 状态 | 说明 |
+|------|------|------|
+| MCPTox response_all.json | ✅ | 25K+ records, 20 models, 1348 malicious instances |
+| MCPTox Re-Analysis v2 | ✅ | 11,203 mapped records, per-paradigm × per-level ASR |
+| Tool Taxonomy (148 tools, L1-L5) | ✅ | 自动标注 + 7 unclear 待人工审核 |
+| 自建 Profiling (Qwen-7B, 2700 trials) | ✅ | 作为 supplementary evidence |
+| MCP-Gym 环境（单轮）| ✅ | 可复用于 GRPO 训练 |
+| SFT / DPO 训练脚本 | ✅ | scripts/vulngrpo_mini.py（TRL 1.0.0 API 已适配）|
+| Qwen2.5-7B-Instruct | ✅ | 已缓存，`/work/tc442/hf_cache/` |
 
 ---
 
-## 第四步：MVE 通过后的完整流程
+## 2. 论文结构（MCPDefender）
 
-按顺序执行 6 个脚本：
+Title：**Beyond Average ASR: Fine-Grained Vulnerability Analysis and RL-Based Defense for MCP Tool Poisoning**
 
-1. **生成训练数据**（~1 分钟）：mcpalign_generate_data.py → 产出 sft_data.json（500 样本）+ dpo_pairs.json（500 pairs）
+### 两个 Contribution
 
-2. **SFT warm-start**（~2-4 小时）：mcpalign_train_sft.py → 产出 sft_checkpoint/。之后验证 JSON 格式合规率 > 90%（让 SFT 模型跑 20 个 episode，检查 parse_agent_action 是否能解析输出）。如果 < 90% 则增加 SFT epochs。
+**C1（Fine-Grained Re-Analysis — 稳赢）**：第一个在 MCPTox 上做 paradigm × level × model 三维分解的分析。
 
-3. **GRPO 训练**（~12-20 小时）：mcpalign_train_grpo.py → 产出 grpo_checkpoint/。建议用 tmux 挂后台。训练日志中观察 avg_reward 是否从负值逐渐上升。
+已确认的 3 个 findings：
+1. **Inverse Risk Paradox**：L3 Communicate (44.0%) 最脆弱，而非 L1 Read-Only
+2. **Paradigm Dominance**：P3 Parameter Tampering (29-51%) 比 P1 Explicit Hijacking (3-24%) 有效 2-5 倍
+3. **Model-Family Divergence**：有的模型 L4 > L1 by 17-20pp，有的 L1 ≈ L4，vulnerability pattern 模型间高度不一致
 
-4. **DPO baseline**（~2-4 小时）：mcpalign_train_dpo.py → 产出 dpo_checkpoint/。可以和 GRPO 并行跑如果有两张卡。
+**C2（MCPDefender — 有 upside）**：GRPO 训练的 defense，**核心实验是 cross-paradigm generalization（train on P1+P2, test on P3）**。
 
-5. **评估**（~1-2 小时）：mcpalign_evaluate.py → 输出 per-step ASR + ΔASR + BTSR + ORR 对比表（No Defense / DPO / GRPO）。
-
-6. **生成图表**（~1 分钟）：mcpalign_analyze.py → 产出 figures/ 目录下的 asr_comparison.pdf + pareto_frontier.pdf + results_table.tex。
-
----
-
-## OOM 排查
-
-如果显存不够，在 configs/mcpalign_mve.yaml 中：
-- num_generations 从 4 降到 2
-- per_device_train_batch_size 从 4 降到 2，gradient_accumulation_steps 从 2 升到 4
-- max_completion_length 从 256 降到 128
+核心假设：DPO 只学到 seen paradigm 的 preference pattern，无法泛化到 unseen P3 parameter tampering。GRPO 通过 online exploration 学到通用的 safety reasoning，能泛化。
 
 ---
 
-## 你需要发回来的结果
+## 3. 实验 Phase 划分
 
-跑完 MVE 后，把以下信息发给我：
+### Phase 1：MCPTox Re-Analysis 完善（Week 1-2）
 
-1. 终端输出的 per-step ASR 表格和 ΔASR 值
-2. experiments/mcpalign_mve/mve_results.json 文件内容
-3. 如果失败了，具体是哪个标准没过
+**3.1 数据修复**
+- 当前 mapping rate 44.7%，需提升到 60%+
+- 人工审核 7 个 unclear tools
+- 按 MCPTox 自己的 `analysis.ipynb` 过滤 `wrong_data==1`
 
-我会根据结果决定下一步：调攻击模板、调模型、还是继续推进完整训练。
+**3.2 统计分析**
+- Three-way ANOVA（paradigm × level × model_family）
+- Cohen's d (P1 vs P3)
+- Model-family Ward's hierarchical clustering + PCA
+- Per-server vulnerability ranking
+
+**3.3 产出**
+- Table 1: Per-Level ASR
+- Table 2: Paradigm × Level ASR
+- Table 3: Per-Model L1-L4 Gap
+- Figure 1: Interaction plot
+- Figure 2: Model clustering dendrogram
+- Figure 3: Per-server heatmap
+
+### Phase 1.5：Zero-Shot Defense Baseline（今晚，1-2 小时）
+
+**目的**：在投入 GRPO 训练之前，先建立 baseline——测量 Qwen-7B 在 MCPTox 攻击下的 vulnerability，并验证 prompt-based defenses 的效果上限。
+
+**设计**：
+- 从 MCPTox 数据中 stratified 采样 ~150 instances（跨 45 servers × 3 paradigms × 5 levels）
+- 3 个 defense 条件：
+  1. **no_defense**：直接用 MCPTox 原始 system prompt（含 poisoned tool）
+  2. **prompt_hardening**：加安全警告到 system prompt 顶部
+  3. **defensive_tokens**：在 tool list 前加 "[DEFENSIVE BOUNDARY]" 标记
+- 每个 instance × 每个条件 = 450 次 inference
+- Qwen2.5-7B-Instruct 4-bit，greedy decoding
+- 记录：per-paradigm ASR、per-level ASR、parse rate
+
+**关键看点**：
+1. 如果 `prompt_hardening` 就把 P3 ASR 降到 <20% → MCPDefender 没有空间做，可能需要换方向
+2. 如果 `defensive_tokens` 对 P1/P2 有效但对 P3 无效 → 验证 proposal.tex 的核心假设（prompt defenses 不能 generalize 到 P3）
+3. 如果所有 prompt-based defenses 都没什么用 → GRPO 有充足提升空间
+
+**脚本**：`scripts/mcptox_defense_baseline.py`
+**配置**：`configs/mcptox_defense.yaml`
+**SLURM**：`slurm/run_mcptox_defense.sh`
+
+**预计运行时间**：~22 分钟（inference）+ 5 分钟（模型加载）≈ 30 分钟
+
+**Go/No-Go 判定**：
+- 如果 P3 no_defense ASR > 40% AND prompt defenses 没把 P3 降到 < 30% → 继续 Phase 2 MCPDefender
+- 如果 prompt defenses 已经把 P3 降到 < 25% → 重新评估（可能需要更强攻击或换方向）
+
+### Phase 2：MCPDefender 训练（Week 3-5）
+
+**前提**：Phase 1.5 显示 prompt defenses 对 P3 不够有效。
+
+**2.1 训练数据构造**
+- 全部来自 MCPTox（不自建）
+- 只用 P1 + P2（Template-1, Template-2）
+- P3 完全 held-out for evaluation
+
+**2.2 Pipeline**
+```
+SFT warm-start (~2h, 600 examples)
+  ↓
+DPO baseline (~1h, 600 pairs, P1+P2 only)
+  ↓
+GRPO training (~12-18h, 1500 steps, G=4)
+  - Environment: MCPTox registries with P1+P2 poisons
+  - Uniform paradigm sampling（让 GRPO 自己发现 P1 vs P2 的难度差异）
+  - Log per-paradigm advantage magnitude
+```
+
+**2.3 Memory 预算（A5000 24GB）**
+- Base 4-bit: ~4GB
+- LoRA + optimizer: ~2GB
+- Reference model: ~4GB
+- KV cache (G=4): ~6GB
+- Gradients: ~6GB
+- **Total: ~22GB**（紧但可行）
+
+### Phase 3：Evaluation（Week 6-7）
+
+**核心评估表**：
+
+| Method | Seen (P1+P2)↓ | **Unseen (P3)↓** | All↓ | BTSR↑ | ORR↓ |
+|--------|:---:|:---:|:---:|:---:|:---:|
+| No Defense | ~18 | ~45 | ~28 | ~92 | ~2 |
+| Prompt Hardening | ? | ? | ? | ? | ? |
+| DefensiveTokens | ? | ? | ? | ? | ? |
+| SFT | ~14 | ~42 | ~26 | ~90 | ~5 |
+| DPO | ~10 | ~40 | ~22 | ~88 | ~7 |
+| **MCPDefender** | **~8** | **~28** | **~16** | **~89** | **~6** |
+
+**Unseen (P3) 列是论文成败的关键。**
+
+**成功标准**：
+- EMNLP/CCS 顶会：MCPDefender Unseen-P3 ASR < DPO Unseen-P3 ASR − 10pp
+- Findings：任何 MCPDefender > DPO on P3 的 margin
+- Workshop：Re-analysis 单独发
+
+---
+
+## 4. 今晚的具体执行
+
+### 已提交的 job
+
+```
+Job ID: 45351805 (scavenger-gpu)
+Script: scripts/mcptox_defense_baseline.py
+Config: configs/mcptox_defense.yaml
+```
+
+### 监控
+
+```bash
+squeue -u tc442
+tail -f slurm/logs/mcptox_def_45351805.out
+```
+
+### 结果文件
+
+```
+experiments/mcptox_defense_baseline/
+├── defense_baseline_raw.csv      # 所有 trials
+├── per_paradigm_asr.csv          # 3 defenses × 3 paradigms pivot
+├── per_level_asr.csv             # 3 defenses × 5 levels pivot
+└── summary.json                  # 汇总
+```
+
+### 结果分析后的下一步
+
+1. 如果 P3 no_defense ASR > 40% 且 defenses 没降到 <30% → 立刻开始 Phase 2 MCPDefender 数据构造
+2. 如果 defenses 太有效 → 讨论是不是换更难的攻击 subset，或者调整 scope
+3. 无论如何，更新 temp-result.md 记录 baseline 数据
+
+---
+
+## 5. 下一步（Phase 2 启动条件）
+
+Phase 1.5 Go 之后立刻做的事：
+1. 写 `scripts/mcptox_grpo_train.py`——从 MCPTox 构造 GRPO episodes（P1+P2 only）
+2. 写 SFT + DPO 脚本（可复用 `scripts/vulngrpo_mini.py` 的部分）
+3. 在 A5000 24GB 上跑 SFT warm-start
+4. 然后 DPO baseline
+5. 最后 GRPO
+
+---
+
+## 6. 风险与应对
+
+| 风险 | 概率 | 应对 |
+|------|------|------|
+| Phase 1.5 显示 prompt hardening 就能降 P3 < 30% | 20% | 换更难的攻击 subset 或换模型 |
+| GRPO 在 unseen P3 上差距 < 5pp | 30% | Re-analysis + baselines 发 Findings |
+| GRPO unseen-P3 差距 5-10pp | 35% | 可发，加上 re-analysis |
+| GRPO unseen-P3 差距 > 10pp | 15% | 强结果，投 EMNLP/CCS |
+| A5000 24GB 装不下 GRPO G=4 | 15% | G=2 或换 RTX 5000 Ada 32GB |
+| MCPTox mapping 提升无望 | 30% | 用当前 45% coverage 发 paper，声明 limitation |

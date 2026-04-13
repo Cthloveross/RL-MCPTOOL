@@ -52,7 +52,24 @@ def parse_agent_action(raw_output: str) -> AgentAction:
         if parsed and "action" in parsed:
             return _build_action(parsed, raw_output)
 
-    # Strategy 4: heuristic keyword detection
+    # Strategy 4: partial JSON recovery — extract action/tool from broken JSON
+    if '"action"' in raw_output:
+        action_match = re.search(r'"action"\s*:\s*"(\w+)"', raw_output)
+        if action_match:
+            action_str = action_match.group(1).upper()
+            if action_str in VALID_ACTIONS:
+                tool_match = re.search(r'"tool"\s*:\s*"([^"]+)"', raw_output)
+                reason_match = re.search(r'"reason"\s*:\s*"([^"]*)"', raw_output)
+                return AgentAction(
+                    action=action_str,
+                    tool=tool_match.group(1) if tool_match else None,
+                    arguments=None,
+                    reason=reason_match.group(1) if reason_match else raw_output,
+                    parse_success=True,
+                    raw_output=raw_output,
+                )
+
+    # Strategy 5: heuristic keyword detection
     output_lower = raw_output.lower()
     if any(kw in output_lower for kw in ["i cannot", "i refuse", "unsafe", "suspicious"]):
         result.action = "REFUSE"

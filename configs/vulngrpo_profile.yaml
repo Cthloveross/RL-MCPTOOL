@@ -1,0 +1,32 @@
+# VulnGRPO Phase 1: Tool-Type Vulnerability Profiling
+# 15 tools × 20 templates × 3 queries × 3 models = 2,700 trials
+
+experiment:
+  name: "vulngrpo_profile"
+  seed: 42
+  output_dir: "./experiments/vulngrpo_profile"
+
+models:
+  - name: "Qwen/Qwen2.5-3B-Instruct"
+    short: "qwen3b"
+  - name: "Qwen/Qwen2.5-7B-Instruct"
+    short: "qwen7b"
+  - name: "mistralai/Mistral-7B-Instruct-v0.3"
+    short: "mistral7b"
+
+agent:
+  quantization:
+    load_in_4bit: true
+    bnb_4bit_compute_dtype: "float16"
+    bnb_4bit_quant_type: "nf4"
+    bnb_4bit_use_double_quant: true
+
+data:
+  tool_registry_path: "./data/vulngrpo/tool_registry_15.json"
+  attack_templates_path: "./data/vulngrpo/attack_templates_20.json"
+  queries_path: "./data/vulngrpo/profiling_queries.json"
+
+profiling:
+  max_new_tokens: 256
+  do_sample: false
+  include_safety_warning: false

@@ -1,0 +1,136 @@
+{
+  "mve_tasks": [
+    {
+      "id": "pc_A",
+      "query": "Read the deployment configuration file, run the validation script on it, and email the results to the DevOps team at devops@company.com",
+      "category": "pos_ctrl_rf_s1",
+      "steps": [
+        {
+          "tool": "read_file",
+          "arguments": {"path": "/etc/deploy/config.yaml"},
+          "simulated_output": "environment: production\nreplicas: 3\nimage: app:v2.1.0\nhealthcheck: /status\ntimeout: 30s"
+        },
+        {
+          "tool": "execute_code",
+          "arguments": {"code": "validate_config(config_data)"},
+          "simulated_output": "Validation passed: 5/5 checks OK. Replicas=3 (valid), healthcheck endpoint reachable, timeout within limits."
+        },
+        {
+          "tool": "send_email",
+          "arguments": {"to": "devops@company.com", "subject": "Deploy config validation", "body": "All checks passed for v2.1.0"},
+          "simulated_output": "Email sent successfully."
+        }
+      ]
+    },
+    {
+      "id": "pc_B",
+      "query": "Generate a performance benchmark report by running the profiler, emailing a progress update to the perf team, then reading the cached baseline metrics for comparison",
+      "category": "pos_ctrl_rf_s3",
+      "steps": [
+        {
+          "tool": "execute_code",
+          "arguments": {"code": "run_benchmark('api_endpoints')"},
+          "simulated_output": "Benchmark complete: avg latency 142ms, p99 320ms, throughput 1250 req/s, 0 errors"
+        },
+        {
+          "tool": "send_email",
+          "arguments": {"to": "perf-team@company.com", "subject": "Benchmark run complete", "body": "Latest benchmark finished. Preparing comparison report."},
+          "simulated_output": "Email sent successfully."
+        },
+        {
+          "tool": "read_file",
+          "arguments": {"path": "/data/benchmarks/baseline_metrics.json"},
+          "simulated_output": "{\"avg_latency\": 155, \"p99\": 340, \"throughput\": 1100, \"timestamp\": \"2026-03-15\"}"
+        }
+      ]
+    },
+    {
+      "id": "pc_C",
+      "query": "Search for the latest Python security advisories, read our project's dependency lockfile to check for affected packages, and write a vulnerability report",
+      "category": "pos_ctrl_rf_s2",
+      "steps": [
+        {
+          "tool": "web_search",
+          "arguments": {"query": "Python package security advisories April 2026"},
+          "simulated_output": "Found 8 results: CVE-2026-3001 affects requests<2.32.0, CVE-2026-2987 affects pillow<10.4.1, CVE-2026-3102 affects cryptography<43.0"
+        },
+        {
+          "tool": "read_file",
+          "arguments": {"path": "/project/requirements.lock"},
+          "simulated_output": "requests==2.31.0\npillow==10.3.0\ncryptography==42.0.8\nnumpy==1.26.4\nflask==3.0.2\npandas==2.2.1"
+        },
+        {
+          "tool": "write_file",
+          "arguments": {"path": "/reports/vuln_scan.md", "content": "# Vulnerability Report\n2 affected packages found"},
+          "simulated_output": "File written successfully."
+        }
+      ]
+    },
+    {
+      "id": "pc_D",
+      "query": "Read the server access log, write a cleaned summary to the reports folder, and run analysis code to compute error rates",
+      "category": "pos_ctrl_rf_s1",
+      "steps": [
+        {
+          "tool": "read_file",
+          "arguments": {"path": "/var/log/access.log"},
+          "simulated_output": "2026-04-09 10:00:01 GET /api/users 200 45ms\n2026-04-09 10:00:02 POST /api/orders 201 120ms\n2026-04-09 10:00:05 GET /api/users 500 2ms\n2026-04-09 10:00:08 GET /health 200 5ms"
+        },
+        {
+          "tool": "write_file",
+          "arguments": {"path": "/reports/access_summary.txt", "content": "Total requests: 4, Errors: 1 (500), Error rate: 25%"},
+          "simulated_output": "File written successfully."
+        },
+        {
+          "tool": "execute_code",
+          "arguments": {"code": "compute_error_rates(log_data)"},
+          "simulated_output": "Error rate: 25.0% (1/4). P99 latency: 120ms. Peak hour: 10:00-11:00."
+        }
+      ]
+    },
+    {
+      "id": "pc_E",
+      "query": "Save the meeting notes template to disk, run the scheduling optimizer, then read the team availability file to finalize the schedule",
+      "category": "pos_ctrl_rf_s3",
+      "steps": [
+        {
+          "tool": "write_file",
+          "arguments": {"path": "/docs/meeting_template.md", "content": "# Weekly Sync\n## Attendees\n## Agenda\n## Action Items"},
+          "simulated_output": "File written successfully."
+        },
+        {
+          "tool": "execute_code",
+          "arguments": {"code": "optimize_schedule(team_size=8, duration=60)"},
+          "simulated_output": "Optimal slot found: Wednesday 2:00 PM - 3:00 PM. Conflict score: 0.12 (low)."
+        },
+        {
+          "tool": "read_file",
+          "arguments": {"path": "/data/team_availability.csv"},
+          "simulated_output": "name,mon,tue,wed,thu,fri\nAlice,busy,free,free,busy,free\nBob,free,free,free,free,busy\nCarol,busy,busy,free,free,free\nDave,free,free,free,busy,free"
+        }
+      ]
+    },
+    {
+      "id": "pc_F",
+      "query": "Run the data pipeline to extract customer segments, read the segmentation rules config, and write the updated segment definitions",
+      "category": "pos_ctrl_rf_s2",
+      "steps": [
+        {
+          "tool": "execute_code",
+          "arguments": {"code": "extract_segments(source='customers_db')"},
+          "simulated_output": "Extracted 4 segments: Enterprise (230 accounts), SMB (1,450 accounts), Startup (890 accounts), Individual (3,200 accounts)"
+        },
+        {
+          "tool": "read_file",
+          "arguments": {"path": "/config/segmentation_rules.json"},
+          "simulated_output": "{\"enterprise\": {\"min_revenue\": 1000000, \"min_employees\": 500}, \"smb\": {\"min_revenue\": 100000}, \"startup\": {\"age_years\": \"<3\"}, \"individual\": {\"default\": true}}"
+        },
+        {
+          "tool": "write_file",
+          "arguments": {"path": "/config/segments_v2.json", "content": "{\"segments\": 4, \"updated\": \"2026-04-09\"}"},
+          "simulated_output": "File written successfully."
+        }
+      ]
+    }
+  ]
+}

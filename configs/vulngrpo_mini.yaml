@@ -1,0 +1,43 @@
+# VulnGRPO Mini — Quick Validation
+# 6 tools × 4 templates, Qwen2.5-7B, single GPU ~7-8h
+
+experiment:
+  name: "vulngrpo_mini"
+  seed: 42
+  output_dir: "./experiments/vulngrpo_mini"
+
+agent:
+  model_name: "Qwen/Qwen2.5-7B-Instruct"
+  quantization:
+    load_in_4bit: true
+    bnb_4bit_compute_dtype: "float16"
+    bnb_4bit_quant_type: "nf4"
+    bnb_4bit_use_double_quant: true
+
+data:
+  tool_registry_path: "./data/vulngrpo/tool_registry_15.json"
+  attack_templates_path: "./data/vulngrpo/attack_templates_20.json"
+  queries_path: "./data/vulngrpo/profiling_queries.json"
+
+sft:
+  n_per_type: 50
+  epochs: 2
+  batch_size: 2
+  grad_accum: 4
+  lr: 2.0e-5
+
+dpo:
+  n_per_type: 50
+  epochs: 1
+  batch_size: 2
+  grad_accum: 4
+  lr: 5.0e-7
+
+grpo:
+  G: 4
+  total_steps: 300
+  lr: 3.0e-5
+  max_new_tokens: 256
+  benign_ratio: 0.5
+  log_interval: 25
+  save_interval: 100
