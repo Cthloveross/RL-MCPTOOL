@@ -127,13 +127,19 @@ def main():
     logger.info("Base model: %s", model_name)
     logger.info("Precision: %s", args.precision)
 
-    # ── Load SFT data and build GRPO dataset ────────────────────
-    sft_path = cfg["data"]["sft_data_path"]
-    with open(sft_path) as f:
-        sft_data = json.load(f)
-    logger.info("Loaded %d SFT examples from %s", len(sft_data), sft_path)
+    # ── Load GRPO training data ───────────────────────────────────
+    grpo_data_path = cfg["data"].get("grpo_data_path", cfg["data"]["sft_data_path"])
+    with open(grpo_data_path) as f:
+        raw_data = json.load(f)
+    logger.info("Loaded %d examples from %s", len(raw_data), grpo_data_path)
 
-    dataset = build_grpo_dataset(sft_data)
+    # Check if data is pre-built (has "prompt" key) or SFT format (has "messages" key)
+    if raw_data and "prompt" in raw_data[0]:
+        # Pre-built GRPO data (from build_t1_grpo_data.py)
+        dataset = Dataset.from_list(raw_data)
+    else:
+        # SFT format — convert
+        dataset = build_grpo_dataset(raw_data)
     logger.info("GRPO dataset: %d prompts", len(dataset))
 
     # ── Tokenizer ───────────────────────────────────────────────
@@ -204,6 +210,7 @@ def main():
         per_device_train_batch_size=grpo_cfg.get("per_device_train_batch_size", 2),
         gradient_accumulation_steps=grpo_cfg.get("gradient_accumulation_steps", 4),
         num_generations=grpo_cfg.get("num_generations", 4),
+        generation_batch_size=grpo_cfg.get("num_generations", 4),
         max_completion_length=grpo_cfg.get("max_completion_length", 256),
         learning_rate=grpo_cfg.get("learning_rate", 5e-6),
         lr_scheduler_type=grpo_cfg.get("lr_scheduler_type", "cosine"),
@@ -228,9 +235,10 @@ def main():
         grpo_kwargs["vllm_gpu_memory_utilization"] = grpo_cfg.get("vllm_gpu_memory_utilization", 0.3)
 
     # Disable Qwen3 think mode to save tokens (tool calls are short)
+    # Higher temperature = more diverse completions = more gradient signal
     grpo_kwargs["generation_kwargs"] = {
         "do_sample": True,
-        "temperature": 0.7,
+        "temperature": 0.9,
     }
     grpo_kwargs["chat_template_kwargs"] = {"enable_thinking": False}
 
